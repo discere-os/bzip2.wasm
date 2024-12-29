@@ -312,7 +312,15 @@ if(ENABLE_SHARED_LIB)
     set_target_properties(bz2 PROPERTIES
         COMPILE_FLAGS "${WARNCFLAGS}"
         VERSION ${LT_VERSION} SOVERSION ${LT_SOVERSION})
-    install(TARGETS bz2 DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    if(WIN32)
+        set_target_properties(bz2 PROPERTIES
+        RUNTIME_OUTPUT_NAME "bz2-${LT_SOVERSION}")
+    endif()
+    target_compile_definitions(bz2 PRIVATE LIBBZ2)
+    install(TARGETS bz2
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
     install(FILES bzlib.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
     if(USE_OLD_SONAME)
@@ -369,7 +377,8 @@ if(ENABLE_APP)
     target_link_libraries(bzip2
         PRIVATE   bz2_ObjLib)
     if(WIN32)
-        target_compile_definitions(bzip2 PUBLIC BZ_LCCWIN32 BZ_UNIX=0)
+        target_compile_definitions(bzip2 PUBLIC BZ_LCCWIN32 BZ_UNIX=0
+            PRIVATE BZIP2)
     else()
         target_compile_definitions(bzip2 PUBLIC BZ_LCCWIN32=0 BZ_UNIX)
     endif()
@@ -387,7 +396,8 @@ if(ENABLE_APP)
     target_link_libraries(bzip2recover
         PRIVATE bz2_ObjLib)
     if(WIN32)
-        target_compile_definitions(bzip2recover PUBLIC BZ_LCCWIN32 BZ_UNIX=0)
+        target_compile_definitions(bzip2recover PUBLIC BZ_LCCWIN32 BZ_UNIX=0
+            PRIVATE BZIP2RECOVER)
     else()
         target_compile_definitions(bzip2recover PUBLIC BZ_LCCWIN32=0 BZ_UNIX)
     endif()

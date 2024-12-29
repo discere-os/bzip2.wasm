@@ -12,11 +12,12 @@ endfunction()
 # Install a symlink of binary target to the "bin" directory.
 # On Windows, it will be a copy instead of a symlink.
 function(install_target_symlink original symlink)
+    set(op create_symlink)
     if(WIN32)
-        set(op copy)
         set(symlink "${symlink}.exe")
-    else()
-        set(op create_symlink)
+        if (NOT ENABLE_SYMLINK_ON_WINDOWS)
+            set(op copy)
+        endif()
     endif()
     add_custom_command(TARGET ${original} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E ${op} $<TARGET_FILE_NAME:${original}> ${symlink}

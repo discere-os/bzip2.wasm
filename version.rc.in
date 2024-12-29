@@ -29,10 +29,10 @@ BEGIN
           // VALUE "Comments", ""
           VALUE "CompanyName", "bzip2, https://gitlab.com/bzip2/bzip2"
           VALUE "FileDescription", "bzip2"
-          VALUE "FileVersion", "1.0.6"
+          VALUE "FileVersion", "@bzip2_VERSION@"
 #if defined(LIBBZ2)
-          VALUE "InternalName", "libbz2"
-          VALUE "OriginalFilename", "libbz2.dll"
+          VALUE "InternalName", "bz2-@LT_SOVERSION@"
+          VALUE "OriginalFilename", "bz2-@LT_SOVERSION@.dll"
 #elif defined(BZIP2)
           VALUE "InternalName", "bzip2"
           VALUE "OriginalFilename", "bzip2.exe"
@@ -43,7 +43,7 @@ BEGIN
           VALUE "LegalCopyright", "Copyright (C) 1996-2010 Julian Seward <jseward@acm.org>. All rights reserved."
           VALUE "LegalTrademarks", ""
           VALUE "ProductName", "bzip2"
-          VALUE "ProductVersion", "1.0.6"
+          VALUE "ProductVersion", "@bzip2_VERSION@"
           // VALUE "SpecialBuild", ""
       END
     END

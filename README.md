@@ -36,7 +36,7 @@ pnpm test
 ### Basic Compression
 
 ```typescript
-import Bzip2 from 'bzip2.wasm'
+import Bzip2 from '@superstruct/bzip2.wasm'
 
 const bzip2 = new Bzip2()
 await bzip2.initialize()

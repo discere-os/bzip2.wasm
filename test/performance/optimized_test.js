@@ -386,7 +386,7 @@ async function main() {
         
         if (results && results.passedTests === results.totalTests) {
             console.log('\n🎉 All performance tests passed!');
-            console.log('🚀 Optimized bzip2.wasm is ready for production use.');
+            console.log('🚀 Optimized bzip2.wasm testing completed successfully.');
             process.exit(0);
         } else {
             console.log('\n⚠️ Some performance tests failed or modules unavailable');

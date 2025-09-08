@@ -24,6 +24,8 @@
     "benchmark": "node performance_test.js",
     "benchmark:optimized": "node test/performance/benchmark_optimized.js",
     "benchmark:compare": "npm run benchmark && npm run benchmark:optimized",
+    "demo": "python3 serve-demo.py 8080",
+    "demo:dev": "python3 serve-demo.py 3000",
     "dev": "python3 -m http.server 3000"
   },
   "keywords": [

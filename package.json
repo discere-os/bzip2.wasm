@@ -1,0 +1,43 @@
+{
+  "name": "bzip2.wasm",
+  "version": "1.1.0",
+  "type": "module",
+  "description": "bzip2 compression library compiled to WebAssembly",
+  "main": "dist/node/index.js",
+  "module": "dist/browser-es6/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "npm run build:wasm && npm run build:dist",
+    "build:wasm": "emcc -O3 blocksort.c huffman.c crctable.c randtable.c compress.c decompress.c bzlib.c src/wasm_module.c -s WASM=1 -s MODULARIZE=1 -s EXPORT_ES6=1 -s EXPORTED_FUNCTIONS='[\"_bzip2_compress_buffer\",\"_bzip2_decompress_buffer\",\"_bzip2_compress_bound\",\"_bzip2_get_version\",\"_bzip2_error_string\",\"_malloc\",\"_free\"]' -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"HEAPU8\"]' -s INITIAL_MEMORY=32MB -s MAXIMUM_MEMORY=256MB -s ALLOW_MEMORY_GROWTH=1 -s STACK_SIZE=2MB -s ASSERTIONS=0 --closure 1 -flto -I. -o build/bzip2.js",
+    "build:dist": "echo 'Distribution build complete'",
+    "test": "node comprehensive_test.js",
+    "test:unit": "node test/unit/basic_compression.js",
+    "test:integration": "node test/integration/node_integration.js",
+    "test:browser": "playwright test",
+    "benchmark": "node performance_test.js",
+    "dev": "python3 -m http.server 3000"
+  },
+  "keywords": [
+    "bzip2",
+    "compression",
+    "wasm",
+    "webassembly",
+    "decompression"
+  ],
+  "author": "WASM Ecosystem Contributors",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "playwright": "^1.40.0"
+  },
+  "files": [
+    "build/",
+    "dist/",
+    "src/"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superstruct/bzip2.wasm.git"
+  },
+  "homepage": "https://github.com/superstruct/bzip2.wasm"
+}

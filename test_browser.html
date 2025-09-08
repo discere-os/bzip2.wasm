@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>bzip2.wasm Browser Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fafafa;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .performance-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .performance-metric {
+            text-align: center;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 4px;
+        }
+        .performance-metric strong {
+            display: block;
+            font-size: 1.2em;
+            color: #495057;
+        }
+        #log {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background: #f8f9fa;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗜️ bzip2.wasm Browser Test</h1>
+        
+        <div class="test-section">
+            <h3>Module Status</h3>
+            <div id="module-status" class="test-result info">Initializing...</div>
+            <div id="version-info" class="test-result info" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Function Tests</h3>
+            <button onclick="runBasicTests()" id="basic-test-btn">Run Basic Tests</button>
+            <div id="basic-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Performance Benchmark</h3>
+            <button onclick="runPerformanceTest()" id="perf-test-btn">Run Performance Test</button>
+            <div id="performance-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Interactive Compression</h3>
+            <textarea id="input-text" rows="4" cols="80" placeholder="Enter text to compress...">Hello, World! This is a test string for bzip2 compression in the browser!</textarea><br>
+            <button onclick="compressInput()">Compress</button>
+            <button onclick="decompressOutput()">Decompress</button><br>
+            <div id="compression-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Log</h3>
+            <div id="log"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import bzip2 from './dist/browser-es6/index.js';
+
+        let compressedData = null;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.style.color = type === 'error' ? 'red' : type === 'success' ? 'green' : 'black';
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateStatus(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.className = `test-result ${type}`;
+            element.textContent = message;
+        }
+
+        // Initialize bzip2 module
+        async function initializeBzip2() {
+            try {
+                log('Initializing bzip2.wasm module...');
+                await bzip2.initialize();
+                
+                const version = bzip2.getVersion();
+                updateStatus('module-status', 'Module initialized successfully!', 'success');
+                
+                const versionDiv = document.getElementById('version-info');
+                versionDiv.textContent = `bzip2 Version: ${version}`;
+                versionDiv.style.display = 'block';
+                
+                log(`bzip2.wasm initialized successfully, version: ${version}`, 'success');
+                
+                // Enable test buttons
+                document.getElementById('basic-test-btn').disabled = false;
+                document.getElementById('perf-test-btn').disabled = false;
+                
+            } catch (error) {
+                updateStatus('module-status', `Initialization failed: ${error.message}`, 'error');
+                log(`Initialization failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Run basic functionality tests
+        window.runBasicTests = async function() {
+            const resultsDiv = document.getElementById('basic-results');
+            resultsDiv.innerHTML = '';
+            
+            const tests = [
+                {
+                    name: 'Empty Input Test',
+                    test: async () => {
+                        const input = new Uint8Array(0);
+                        const compressed = bzip2.compress(input);
+                        const decompressed = bzip2.decompress(compressed);
+                        return decompressed.length === 0;
+                    }
+                },
+                {
+                    name: 'String Compression Test',
+                    test: async () => {
+                        const testString = 'Hello, bzip2.wasm!';
+                        const compressed = bzip2.compress(testString);
+                        const decompressed = bzip2.decompress(compressed);
+                        const result = new TextDecoder().decode(decompressed);
+                        return result === testString;
+                    }
+                },
+                {
+                    name: 'Binary Data Test',
+                    test: async () => {
+                        const input = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+                        const compressed = bzip2.compress(input);
+                        const decompressed = bzip2.decompress(compressed);
+                        return input.every((val, index) => val === decompressed[index]);
+                    }
+                },
+                {
+                    name: 'Large Text Test',
+                    test: async () => {
+                        const largeText = 'Lorem ipsum dolor sit amet. '.repeat(1000);
+                        const compressed = bzip2.compress(largeText);
+                        const decompressed = bzip2.decompress(compressed);
+                        const result = new TextDecoder().decode(decompressed);
+                        return result === largeText;
+                    }
+                },
+                {
+                    name: 'Compress Bound Test',
+                    test: async () => {
+                        const bound = bzip2.getCompressBound(1000);
+                        return bound > 1000;
+                    }
+                },
+                {
+                    name: 'Error String Test',
+                    test: async () => {
+                        const errorString = bzip2.getErrorString(0);
+                        return errorString === 'BZ_OK';
+                    }
+                }
+            ];
+
+            let passed = 0;
+            let total = tests.length;
+
+            for (const test of tests) {
+                try {
+                    const success = await test.test();
+                    if (success) {
+                        passed++;
+                        resultsDiv.innerHTML += `<div class="test-result success">✅ ${test.name}</div>`;
+                        log(`Test passed: ${test.name}`, 'success');
+                    } else {
+                        resultsDiv.innerHTML += `<div class="test-result error">❌ ${test.name}: Test failed</div>`;
+                        log(`Test failed: ${test.name}`, 'error');
+                    }
+                } catch (error) {
+                    resultsDiv.innerHTML += `<div class="test-result error">❌ ${test.name}: ${error.message}</div>`;
+                    log(`Test error: ${test.name}: ${error.message}`, 'error');
+                }
+            }
+
+            resultsDiv.innerHTML += `<div class="test-result info">📊 Results: ${passed}/${total} tests passed</div>`;
+        };
+
+        // Run performance test
+        window.runPerformanceTest = async function() {
+            const resultsDiv = document.getElementById('performance-results');
+            resultsDiv.innerHTML = '<div class="test-result info">Running performance test...</div>';
+
+            try {
+                const testData = 'The quick brown fox jumps over the lazy dog. '.repeat(2000); // ~90KB
+                const iterations = 5;
+
+                // Warm up
+                bzip2.compress(testData.slice(0, 100));
+
+                const compressionTimes = [];
+                const decompressionTimes = [];
+                let finalCompressed = null;
+
+                for (let i = 0; i < iterations; i++) {
+                    // Compression timing
+                    const compStart = performance.now();
+                    finalCompressed = bzip2.compress(testData);
+                    const compEnd = performance.now();
+                    compressionTimes.push(compEnd - compStart);
+
+                    // Decompression timing
+                    const decompStart = performance.now();
+                    bzip2.decompress(finalCompressed);
+                    const decompEnd = performance.now();
+                    decompressionTimes.push(decompEnd - decompStart);
+                }
+
+                const avgCompressionTime = compressionTimes.reduce((a, b) => a + b) / compressionTimes.length;
+                const avgDecompressionTime = decompressionTimes.reduce((a, b) => a + b) / decompressionTimes.length;
+
+                const inputSizeMB = testData.length / (1024 * 1024);
+                const compressedSizeMB = finalCompressed.length / (1024 * 1024);
+
+                const compressionSpeedMBs = inputSizeMB / (avgCompressionTime / 1000);
+                const decompressionSpeedMBs = inputSizeMB / (avgDecompressionTime / 1000);
+                const compressionRatio = ((testData.length - finalCompressed.length) / testData.length * 100);
+
+                resultsDiv.innerHTML = `
+                    <div class="test-result success">✅ Performance test completed</div>
+                    <div class="performance-grid">
+                        <div class="performance-metric">
+                            <strong>${compressionSpeedMBs.toFixed(2)} MB/s</strong>
+                            <span>Compression Speed</span>
+                        </div>
+                        <div class="performance-metric">
+                            <strong>${decompressionSpeedMBs.toFixed(2)} MB/s</strong>
+                            <span>Decompression Speed</span>
+                        </div>
+                        <div class="performance-metric">
+                            <strong>${compressionRatio.toFixed(1)}%</strong>
+                            <span>Compression Ratio</span>
+                        </div>
+                        <div class="performance-metric">
+                            <strong>${(finalCompressed.length / 1024).toFixed(1)} KB</strong>
+                            <span>Compressed Size</span>
+                        </div>
+                    </div>
+                `;
+
+                log(`Performance: ${compressionSpeedMBs.toFixed(2)} MB/s compression, ${decompressionSpeedMBs.toFixed(2)} MB/s decompression`, 'success');
+
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="test-result error">❌ Performance test failed: ${error.message}</div>`;
+                log(`Performance test failed: ${error.message}`, 'error');
+            }
+        };
+
+        // Interactive compression
+        window.compressInput = function() {
+            try {
+                const input = document.getElementById('input-text').value;
+                const inputBytes = new TextEncoder().encode(input);
+                
+                const startTime = performance.now();
+                compressedData = bzip2.compress(inputBytes);
+                const endTime = performance.now();
+                
+                const compressionRatio = ((inputBytes.length - compressedData.length) / inputBytes.length * 100);
+                
+                document.getElementById('compression-results').innerHTML = `
+                    <div class="test-result success">
+                        ✅ Compressed: ${inputBytes.length} bytes → ${compressedData.length} bytes 
+                        (${compressionRatio.toFixed(1)}% reduction in ${(endTime - startTime).toFixed(2)}ms)
+                    </div>
+                `;
+                
+                log(`Interactive compression: ${inputBytes.length} → ${compressedData.length} bytes`, 'success');
+                
+            } catch (error) {
+                document.getElementById('compression-results').innerHTML = `
+                    <div class="test-result error">❌ Compression failed: ${error.message}</div>
+                `;
+                log(`Interactive compression failed: ${error.message}`, 'error');
+            }
+        };
+
+        window.decompressOutput = function() {
+            if (!compressedData) {
+                document.getElementById('compression-results').innerHTML = `
+                    <div class="test-result error">❌ No compressed data available. Compress first.</div>
+                `;
+                return;
+            }
+
+            try {
+                const startTime = performance.now();
+                const decompressed = bzip2.decompress(compressedData);
+                const endTime = performance.now();
+                
+                const result = new TextDecoder().decode(decompressed);
+                
+                document.getElementById('compression-results').innerHTML = `
+                    <div class="test-result success">
+                        ✅ Decompressed ${compressedData.length} bytes → ${decompressed.length} bytes 
+                        in ${(endTime - startTime).toFixed(2)}ms
+                    </div>
+                    <div class="test-result info">
+                        <strong>Result:</strong> "${result.slice(0, 100)}${result.length > 100 ? '...' : ''}"
+                    </div>
+                `;
+                
+                log(`Interactive decompression: ${compressedData.length} → ${decompressed.length} bytes`, 'success');
+                
+            } catch (error) {
+                document.getElementById('compression-results').innerHTML = `
+                    <div class="test-result error">❌ Decompression failed: ${error.message}</div>
+                `;
+                log(`Interactive decompression failed: ${error.message}`, 'error');
+            }
+        };
+
+        // Initialize on page load
+        initializeBzip2();
+    </script>
+</body>
+</html>

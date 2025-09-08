@@ -275,6 +275,7 @@ jobs:
                 results.decompression[key] = { error: error.message, blockSize: blockSize };
                 results.ratios[key] = { error: error.message, blockSize: blockSize };
                 results.testsFailed = (results.testsFailed || 0) + 1;
+              }
             }
           }
           

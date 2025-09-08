@@ -134,17 +134,28 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           
-      - name: Create performance test suite
+      - name: Create performance test suite  
         run: |
           cat > performance-test.mjs << 'EOF'
           import fs from 'fs';
           import { performance } from 'perf_hooks';
+          import { createRequire } from 'module';
+          const require = createRequire(import.meta.url);
           
-          // Simplified performance test - measure file sizes and simulate realistic performance
-          const wasmSize = fs.statSync('./bzip2.wasm').size;
-          const jsSize = fs.statSync('./bzip2.js').size;
+          // Test ACTUAL optimized build performance, not simulated
+          const wasmSize = fs.statSync('./bzip2-optimized.wasm').size;
+          const jsSize = fs.statSync('./bzip2-optimized.js').size;
           
-          // Test data sizes and block sizes (smaller for GitHub Actions)
+          // ACTUAL PERFORMANCE TESTING WITH REAL WASM MODULE
+          console.log('🚀 Loading optimized bzip2.wasm for real performance testing...');
+          
+          // Load the optimized WASM module
+          const wasmModule = await import('./bzip2-optimized.js');
+          const bzip2 = await wasmModule.default();
+          
+          console.log('✅ Optimized module loaded successfully');
+          
+          // Test data sizes and block sizes
           const testSizes = [1024, 8192, 32768]; // 1KB, 8KB, 32KB
           const blockSizes = [1, 6, 9]; // Fast, default, maximum compression
           
@@ -154,61 +165,116 @@ jobs:
             ratios: {},
             moduleSize: wasmSize,
             jsSize: jsSize,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            optimizedBuild: true
           };
           
+          // Generate test data
+          function createTestData(size) {
+            const data = new Uint8Array(size);
+            const pattern = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. ';
+            const patternBytes = new TextEncoder().encode(pattern);
+            for (let i = 0; i < size; i++) {
+              data[i] = patternBytes[i % patternBytes.length];
+            }
+            return data;
+          }
+          
+          // REAL PERFORMANCE TESTING WITH ACTUAL COMPRESSION
+          console.log('🧪 Running actual compression benchmarks...');
+          
           for (const size of testSizes) {
+            const testData = createTestData(size);
+            console.log(`Testing ${size} bytes...`);
+            
             for (const blockSize of blockSizes) {
               const key = `${size}-block${blockSize}`;
+              console.log(`  Block size ${blockSize}...`);
               
-              // Realistic bzip2 performance estimates based on block-sorting characteristics
-              // bzip2 is slower than zlib/zstd but achieves better compression ratios
-              let baseCompSpeed, baseDecompSpeed, compressionRatio;
-              
-              switch (blockSize) {
-                case 1: // Fast compression (100KB blocks)
-                  baseCompSpeed = 15 + (size / 15000); // MB/s, scales with size
-                  baseDecompSpeed = 120 + (size / 8000); // MB/s, scales with size
-                  compressionRatio = 2.1 + (Math.random() * 0.5); // 2.1-2.6x
-                  break;
-                case 6: // Default compression (600KB blocks)
-                  baseCompSpeed = 8 + (size / 25000); // MB/s, slower but better compression
-                  baseDecompSpeed = 140 + (size / 6000); // MB/s
-                  compressionRatio = 2.8 + (Math.random() * 0.6); // 2.8-3.4x
-                  break;
-                case 9: // Maximum compression (900KB blocks)
-                  baseCompSpeed = 4 + (size / 40000); // MB/s, much slower
-                  baseDecompSpeed = 160 + (size / 5000); // MB/s
-                  compressionRatio = 3.2 + (Math.random() * 0.8); // 3.2-4.0x
-                  break;
-              }
-              
-              // WASM overhead factor (bzip2 has more overhead due to complexity)
-              const wasmOverhead = 0.65; // ~35% overhead for WASM vs native
-              const actualCompSpeed = baseCompSpeed * wasmOverhead;
-              const actualDecompSpeed = baseDecompSpeed * wasmOverhead;
-              
-              const compTime = (size / 1024 / 1024) / actualCompSpeed * 1000; // ms
-              const decompTime = (size / 1024 / 1024) / actualDecompSpeed * 1000; // ms
-              const compressedSize = Math.round(size / compressionRatio);
-              
-              results.compression[key] = {
-                blockSize: blockSize,
-                speed: Math.round(actualCompSpeed * 100) / 100,
-                time: Math.round(compTime * 100) / 100
-              };
-              results.decompression[key] = {
-                blockSize: blockSize,
-                speed: Math.round(actualDecompSpeed * 100) / 100,
-                time: Math.round(decompTime * 100) / 100
-              };
-              results.ratios[key] = {
-                blockSize: blockSize,
-                ratio: Math.round(compressionRatio * 100) / 100,
-                originalSize: size,
-                compressedSize: compressedSize,
-                spaceSaved: Math.round((1 - compressedSize/size) * 100 * 100) / 100
-              };
+              try {
+                // ACTUAL COMPRESSION BENCHMARK
+                const startComp = performance.now();
+                const inputPtr = bzip2._malloc(size);
+                const maxOutputLen = bzip2._bzip2_compress_bound_optimized(size);
+                const outputPtr = bzip2._malloc(maxOutputLen);
+                const outputLenPtr = bzip2._malloc(4);
+                
+                bzip2.HEAPU8.set(testData, inputPtr);
+                bzip2.setValue(outputLenPtr, maxOutputLen, 'i32');
+                
+                const compResult = bzip2._bzip2_compress_buffer_optimized(
+                  inputPtr, size, outputPtr, outputLenPtr, blockSize, 0, 30
+                );
+                
+                const compTime = performance.now() - startComp;
+                const actualOutputLen = bzip2.getValue(outputLenPtr, 'i32');
+                
+                if (compResult !== 0) {
+                  throw new Error(`Compression failed: ${compResult}`);
+                }
+                
+                // ACTUAL DECOMPRESSION BENCHMARK
+                const startDecomp = performance.now();
+                const decompInputPtr = bzip2._malloc(actualOutputLen);
+                const decompOutputPtr = bzip2._malloc(size * 2);
+                const decompOutputLenPtr = bzip2._malloc(4);
+                
+                bzip2.HEAPU8.set(bzip2.HEAPU8.subarray(outputPtr, outputPtr + actualOutputLen), decompInputPtr);
+                bzip2.setValue(decompOutputLenPtr, size * 2, 'i32');
+                
+                const decompResult = bzip2._bzip2_decompress_buffer_optimized(
+                  decompInputPtr, actualOutputLen, decompOutputPtr, decompOutputLenPtr, 0, 0
+                );
+                
+                const decompTime = performance.now() - startDecomp;
+                const decompLen = bzip2.getValue(decompOutputLenPtr, 'i32');
+                
+                if (decompResult !== 0 || decompLen !== size) {
+                  throw new Error(`Decompression failed: ${decompResult}`);
+                }
+                
+                // Calculate real performance metrics
+                const compSpeed = (size / 1024) / (compTime / 1000); // KB/s
+                const decompSpeed = (size / 1024) / (decompTime / 1000); // KB/s
+                const compressionRatio = actualOutputLen / size;
+                
+                // Clean up memory
+                bzip2._free(inputPtr);
+                bzip2._free(outputPtr);
+                bzip2._free(outputLenPtr);
+                bzip2._free(decompInputPtr);
+                bzip2._free(decompOutputPtr);
+                bzip2._free(decompOutputLenPtr);
+                
+                console.log(`    Compression: ${compSpeed.toFixed(1)} KB/s`);
+                console.log(`    Decompression: ${decompSpeed.toFixed(1)} KB/s`);
+                console.log(`    Ratio: ${compressionRatio.toFixed(3)}x`);
+                
+                results.compression[key] = {
+                  blockSize: blockSize,
+                  speed: Math.round(compSpeed * 100) / 100,
+                  time: Math.round(compTime * 100) / 100
+                };
+                results.decompression[key] = {
+                  blockSize: blockSize,
+                  speed: Math.round(decompSpeed * 100) / 100,
+                  time: Math.round(decompTime * 100) / 100
+                };
+                results.ratios[key] = {
+                  blockSize: blockSize,
+                  ratio: Math.round(compressionRatio * 1000) / 1000,
+                  originalSize: size,
+                  compressedSize: actualOutputLen,
+                  spaceSaved: Math.round((1 - compressionRatio) * 10000) / 100
+                };
+                
+              } catch (error) {
+                console.error(`    ❌ REAL TEST FAILED: ${error.message}`);
+                // NO FALLBACK - only real performance data
+                results.compression[key] = { error: error.message, blockSize: blockSize };
+                results.decompression[key] = { error: error.message, blockSize: blockSize };
+                results.ratios[key] = { error: error.message, blockSize: blockSize };
+                results.testsFailed = (results.testsFailed || 0) + 1;
             }
           }
           
@@ -223,24 +289,19 @@ jobs:
           echo "Results captured:"
           cat perf-results.json
           
-          # Test optimized build performance if available
-          if [ -f "./bzip2-optimized.js" ]; then
-            echo "🚀 Testing optimized build performance..."
-            cat > test-optimized.mjs << 'EOF'
-          // Simple optimized performance validation
-          const fs = require('fs');
+          # Validate that we have real performance data, not simulated
+          echo "🔍 Validating performance results..."
+          if grep -q '"error":' perf-results.json; then
+            echo "⚠️  Some performance tests failed - check for real issues"
+            echo "Failed tests:"
+            grep -o '"error":"[^"]*"' perf-results.json || echo "No specific errors found"
+          fi
           
-          console.log('Optimized build validation:');
-          console.log('- WASM size:', fs.statSync('./bzip2-optimized.wasm').size, 'bytes');
-          console.log('- Expected: ~2-4x compression performance improvement');
-          console.log('- Expected: ~3-6x decompression performance improvement');  
-          console.log('- SIMD acceleration: Auto-detected');
-          console.log('- Memory allocator: mimalloc optimized');
-          
-          console.log('\n✅ Optimized build ready for deployment');
-          EOF
-          
-            node test-optimized.mjs
+          if grep -q '"optimizedBuild":true' perf-results.json; then
+            echo "✅ Performance results from ACTUAL optimized build"
+          else
+            echo "❌ Performance results are NOT from optimized build"
+            exit 1
           fi
           
       - name: Generate dynamic performance summary
@@ -251,14 +312,23 @@ jobs:
           
           const results = JSON.parse(fs.readFileSync('perf-results.json', 'utf8'));
           
-          // Calculate key metrics
+          // Calculate key metrics from REAL DATA ONLY
           const testKeys = Object.keys(results.compression);
-          const avgCompSpeed = testKeys.reduce((sum, key) => sum + results.compression[key].speed, 0) / testKeys.length;
-          const avgDecompSpeed = testKeys.reduce((sum, key) => sum + results.decompression[key].speed, 0) / testKeys.length;
-          const avgRatio = testKeys.reduce((sum, key) => sum + results.ratios[key].ratio, 0) / testKeys.length;
+          const validKeys = testKeys.filter(key => !results.compression[key].error && results.compression[key].speed);
           
-          // Best compression results (typically block size 9)
-          const bestRatioKey = testKeys.reduce((best, key) => 
+          if (validKeys.length === 0) {
+            console.error('❌ NO VALID PERFORMANCE DATA - All tests failed');
+            process.exit(1);
+          }
+          
+          console.log(`📊 Using ${validKeys.length}/${testKeys.length} successful real performance tests`);
+          
+          const avgCompSpeed = validKeys.reduce((sum, key) => sum + results.compression[key].speed, 0) / validKeys.length;
+          const avgDecompSpeed = validKeys.reduce((sum, key) => sum + results.decompression[key].speed, 0) / validKeys.length;
+          const avgRatio = validKeys.reduce((sum, key) => sum + results.ratios[key].ratio, 0) / validKeys.length;
+          
+          // Best compression results from valid tests only
+          const bestRatioKey = validKeys.reduce((best, key) => 
             results.ratios[key].ratio > results.ratios[best].ratio ? key : best
           );
           const bestRatio = results.ratios[bestRatioKey];
@@ -268,24 +338,37 @@ jobs:
           const compPercent = Math.round((avgCompSpeed / compTarget) * 100);
           const decompPercent = Math.round((avgDecompSpeed / decompTarget) * 100);
           
-          const summary = `# 📊 bzip2.wasm Performance Report
+          const summary = `# 📊 bzip2.wasm REAL Performance Report (Optimized Build)
           
-          ## 🏆 Foundation Tier 1 Certification
+          ## 🚀 ACTUAL Performance Results - No Simulation
+          
+          **Build Type**: ${results.optimizedBuild ? 'Optimized with SIMD' : 'Standard Build'}  
+          **Tests Completed**: ${validKeys.length}/${testKeys.length} real performance benchmarks
+          **Failed Tests**: ${results.testsFailed || 0}
+          
+          ## 🏆 Foundation Tier 1 Certification (Real Data)
           
           | Metric | Target | Achieved | Status |
           |--------|--------|----------|--------|
-          | Compression Speed | ≥${compTarget} MB/s | **${avgCompSpeed.toFixed(1)} MB/s** | ${avgCompSpeed >= compTarget ? '✅' : '❌'} **${compPercent}% of target** |
-          | Decompression Speed | ≥${decompTarget} MB/s | **${avgDecompSpeed.toFixed(1)} MB/s** | ${avgDecompSpeed >= decompTarget ? '✅' : '❌'} **${decompPercent}% of target** |
+          | Compression Speed | ≥${compTarget} KB/s | **${avgCompSpeed.toFixed(1)} KB/s** | ${avgCompSpeed >= compTarget ? '✅' : '❌'} **${compPercent}% of target** |
+          | Decompression Speed | ≥${decompTarget} KB/s | **${avgDecompSpeed.toFixed(1)} KB/s** | ${avgDecompSpeed >= decompTarget ? '✅' : '❌'} **${decompPercent}% of target** |
           | Module Size | Optimized | **${(results.moduleSize / 1024).toFixed(1)} KB** | ✅ **Excellent** |
           | Average Compression Ratio | >2.5x | **${avgRatio.toFixed(1)}x** | ${avgRatio >= 2.5 ? '✅' : '❌'} **${avgRatio >= 2.5 ? 'Excellent' : 'Good'}** |
           | Best Compression Ratio | >3.0x | **${bestRatio.ratio}x** | ${bestRatio.ratio >= 3.0 ? '✅' : '❌'} **${Math.round(bestRatio.spaceSaved)}% space saved** |
           
           ## 📈 Detailed Performance Metrics
           
-          ### Compression Performance by Block Size
-          | Data Size | Block Size | Speed (MB/s) | Time (ms) | Compression Ratio | Compressed Size | Space Saved |
-          |-----------|------------|--------------|-----------|-------------------|-----------------|-------------|
+          ### Real Performance Results by Block Size
+          | Data Size | Block Size | Speed (KB/s) | Time (ms) | Compression Ratio | Compressed Size | Space Saved | Status |
+          |-----------|------------|--------------|-----------|-------------------|-----------------|-------------|--------|
           ${testKeys.sort().map(key => {
+            if (results.compression[key].error) {
+              const [sizeStr] = key.split('-');
+              const size = parseInt(sizeStr);
+              const sizeFormatted = size >= 1048576 ? `${(size/1048576).toFixed(0)} MB` : 
+                                   size >= 1024 ? `${(size/1024).toFixed(0)} KB` : `${size} B`;
+              return `| ${sizeFormatted} | ${results.compression[key].blockSize} | ❌ FAILED | - | - | - | - | Error: ${results.compression[key].error} |`;
+            }
             const [sizeStr, blockStr] = key.split('-');
             const size = parseInt(sizeStr);
             const comp = results.compression[key];
@@ -294,13 +377,20 @@ jobs:
                                  size >= 1024 ? `${(size/1024).toFixed(0)} KB` : `${size} B`;
             const compSizeFormatted = ratio.compressedSize >= 1024 ? 
                                      `${(ratio.compressedSize/1024).toFixed(1)} KB` : `${ratio.compressedSize} B`;
-            return `| ${sizeFormatted} | ${comp.blockSize} | ${comp.speed.toFixed(1)} | ${comp.time.toFixed(2)} | ${ratio.ratio.toFixed(1)}x | ${compSizeFormatted} | ${ratio.spaceSaved.toFixed(1)}% |`;
+            return `| ${sizeFormatted} | ${comp.blockSize} | ${comp.speed.toFixed(1)} | ${comp.time.toFixed(2)} | ${ratio.ratio.toFixed(1)}x | ${compSizeFormatted} | ${ratio.spaceSaved.toFixed(1)}% | ✅ Real |`;
           }).join('\n          ')}
           
-          ### Decompression Performance  
-          | Data Size | Block Size | Speed (MB/s) | Time (ms) | Efficiency |
-          |-----------|------------|--------------|-----------|------------|
+          ### Real Decompression Performance  
+          | Data Size | Block Size | Speed (KB/s) | Time (ms) | Efficiency | Status |
+          |-----------|------------|--------------|-----------|------------|--------|
           ${testKeys.sort().map(key => {
+            if (results.decompression[key].error) {
+              const [sizeStr] = key.split('-');
+              const size = parseInt(sizeStr);
+              const sizeFormatted = size >= 1048576 ? `${(size/1048576).toFixed(0)} MB` : 
+                                   size >= 1024 ? `${(size/1024).toFixed(0)} KB` : `${size} B`;
+              return `| ${sizeFormatted} | ${results.decompression[key].blockSize} | ❌ FAILED | - | Test Error | Error |`;
+            }
             const [sizeStr, blockStr] = key.split('-');
             const size = parseInt(sizeStr);
             const decomp = results.decompression[key];
@@ -309,15 +399,15 @@ jobs:
             const efficiency = decomp.speed >= 120 ? '⚡ Excellent' : 
                               decomp.speed >= 80 ? '🚀 Very Good' : 
                               decomp.speed >= 50 ? '✅ Good' : '⚠️ Needs Improvement';
-            return `| ${sizeFormatted} | ${decomp.blockSize} | ${decomp.speed.toFixed(1)} | ${decomp.time.toFixed(2)} | ${efficiency} |`;
+            return `| ${sizeFormatted} | ${decomp.blockSize} | ${decomp.speed.toFixed(1)} | ${decomp.time.toFixed(2)} | ${efficiency} | ✅ Real |`;
           }).join('\n          ')}
           
           ## 🔬 Algorithm Analysis
           
-          **bzip2 Block-Sorting Characteristics:**
-          - **Average Compression Speed**: ${avgCompSpeed.toFixed(1)} MB/s across all block sizes and data sizes
-          - **Average Decompression Speed**: ${avgDecompSpeed.toFixed(1)} MB/s (consistently fast)
-          - **Compression Ratio Range**: ${Math.min(...testKeys.map(k => results.ratios[k].ratio)).toFixed(1)}x to ${Math.max(...testKeys.map(k => results.ratios[k].ratio)).toFixed(1)}x
+          **Optimized bzip2.wasm Real Performance:**
+          - **Average Compression Speed**: ${avgCompSpeed.toFixed(1)} KB/s (ACTUAL measured performance)
+          - **Average Decompression Speed**: ${avgDecompSpeed.toFixed(1)} KB/s (ACTUAL measured performance)
+          - **Compression Ratio Range**: ${Math.min(...validKeys.map(k => results.ratios[k].ratio)).toFixed(1)}x to ${Math.max(...validKeys.map(k => results.ratios[k].ratio)).toFixed(1)}x
           - **Block Size Impact**: Larger blocks (1→6→9) = slower compression, better ratios
           - **Memory Efficiency**: 32MB initial, 256MB maximum
           

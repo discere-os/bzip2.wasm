@@ -147,7 +147,7 @@ static void bzip2_optimized_free(void* ptr) {
     
     // Check if pointer is within our pool
     if (ptr >= g_allocator.pool_memory && 
-        ptr < (char*)g_allocator.pool_memory + g_allocator.pool_size) {
+        (char*)ptr < (char*)g_allocator.pool_memory + g_allocator.pool_size) {
         
         MemoryBlock* block = (MemoryBlock*)((char*)ptr - sizeof(MemoryBlock));
         

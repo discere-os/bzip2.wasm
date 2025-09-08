@@ -236,7 +236,7 @@ static void* optimized_bzalloc(void* opaque, int items, int size) {
 static void optimized_bzfree(void* opaque, void* ptr) {
     // Check if pointer is in memory pool
     if (ptr >= g_memory_pool.memory_pool && 
-        ptr < (char*)g_memory_pool.memory_pool + g_memory_pool.pool_size) {
+        (char*)ptr < (char*)g_memory_pool.memory_pool + g_memory_pool.pool_size) {
         // Don't free pool memory, it's managed in bulk
         return;
     }

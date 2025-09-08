@@ -35,17 +35,18 @@ __pycache__
 node_modules/
 package-lock.json
 
-# Build outputs
+# Build outputs (TypeScript compilation and WASM builds)
 dist/
-build/*.js
-build/*.wasm
+build/
 *.js.map
 
-# Test outputs
+# Test outputs  
 test-results/
+coverage/
 playwright-report/
 test-results.json
 server.log
+*.lcov
 
 # Generated headers
 bz_version.h
@@ -54,10 +55,8 @@ bz_version.h
 .env
 .env.local
 
-# WASM build artifacts
-dist/
+# WASM build artifacts (now covered by build/ above)
 build-wasm*/
-*.wasm
 *.js.mem
 *.js.symbols
 *.js.temp
@@ -75,10 +74,8 @@ package-lock.json
 yarn.lock
 npm-debug.log*
 
-# Testing and CI artifacts
-test-results/
+# Testing and CI artifacts (now covered above)
 benchmark-results/
-coverage/
 .nyc_output/
 build-logs/
 

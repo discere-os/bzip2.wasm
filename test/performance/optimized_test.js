@@ -341,7 +341,7 @@ async function runOptimizedPerformanceTest() {
             console.log(`   🔧 Compression below target - consider additional optimizations:`);
             console.log(`      • Increase SIMD usage in block sorting algorithms`);
             console.log(`      • Optimize memory access patterns for cache efficiency`);
-            console.log(`      • Consider threading for large block sizes`);
+            console.log(`      • Consider larger block sizes for better compression`);
         } else {
             console.log(`   ✅ Compression performance exceeds Foundation Tier 1 requirements`);
         }

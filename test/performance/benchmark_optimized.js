@@ -173,7 +173,7 @@ async function runComprehensiveBenchmark() {
     console.log(`📊 Benchmark Configuration:`);
     console.log(`   Module Type: ${moduleType}`);
     console.log(`   SIMD Support: ${bzip2.simdSupported ? '✅' : '❌'}`);
-    console.log(`   Threading Support: ${bzip2.threadingSupported ? '✅' : '❌'}`);
+    console.log(`   Single-threaded: ✅ (faithful to original bzip2)`);
     console.log(`   Data Sizes: ${TEST_CONFIG.dataSizes.map(s => s >= 1024 ? `${s/1024}KB` : `${s}B`).join(', ')}`);
     console.log(`   Block Sizes: ${TEST_CONFIG.blockSizes.join(', ')}`);
     console.log(`   Iterations: ${TEST_CONFIG.iterations} (+ ${TEST_CONFIG.warmupIterations} warmup)\n`);
@@ -186,7 +186,7 @@ async function runComprehensiveBenchmark() {
             platform: process.platform,
             arch: process.arch,
             simdSupported: bzip2.simdSupported,
-            threadingSupported: bzip2.threadingSupported
+            singleThreaded: true
         },
         benchmarks: {}
     };
@@ -424,7 +424,7 @@ async function main() {
         if (results.moduleType === 'optimized') {
             console.log('   ✅ Using optimized module with SIMD acceleration');
             console.log('   🚀 Performance should be 2-4x faster than standard build');
-            console.log('   🔧 Consider threading build for very large files');
+            console.log('   🔧 Consider higher compression levels for better ratios');
         } else {
             console.log('   ⚡ Using standard module');
             console.log('   💡 Build optimized module with: npm run build:optimized');

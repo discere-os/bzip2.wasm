@@ -55,7 +55,7 @@ jobs:
             -s STACK_SIZE=2MB -s ASSERTIONS=0 --closure 1 -flto \
             -I. -o build/bzip2.js
             
-          # Build optimized module with SIMD and advanced optimizations
+          # Build optimized module with SIMD (single-threaded, faithful to bzip2)
           ./build-optimized.sh optimized
           
           # Build compact module for size comparison

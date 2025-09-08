@@ -439,7 +439,6 @@
         }
         
         .feature-badge.simd { background: #9C27B0; }
-        .feature-badge.threading { background: #FF5722; }
         .feature-badge.memory { background: #2196F3; }
     </style>
 </head>
@@ -1319,7 +1318,7 @@ Initializing memory monitor...
 
 Module Status: ${bzip2Module ? 'Loaded' : 'Not Loaded'}
 SIMD Support: ${checkSIMDSupport() ? 'Available ✅' : 'Not Available ❌'}
-Threading Support: ${typeof SharedArrayBuffer !== 'undefined' ? 'Available ✅' : 'Not Available ❌'}
+Single-threaded: ✅ (faithful to original bzip2)
 
 Functions Available:
 ${bzip2Module._bzip2_compress_buffer_optimized ? '✅' : '❌'} _bzip2_compress_buffer_optimized
@@ -1368,7 +1367,7 @@ Browser Environment:
 WebAssembly:
 - Supported: ${typeof WebAssembly !== 'undefined' ? 'Yes' : 'No'}
 - SIMD Support: ${checkSIMDSupport() ? 'Yes' : 'No'}
-- Threading Support: ${typeof SharedArrayBuffer !== 'undefined' ? 'Yes' : 'No'}`;
+- Threading: Not used (faithful single-threaded design)`;
         }
         
         // Build comparison
@@ -1378,7 +1377,7 @@ WebAssembly:
                 <tr>
                     <td><strong>Optimized</strong></td>
                     <td>~128 KB</td>
-                    <td>SIMD, mimalloc, LTO, fast-math</td>
+                    <td>SIMD, mimalloc, LTO, fast-math, single-threaded</td>
                     <td>2-4x compression, 3-6x decompression</td>
                     <td>Chrome 91+, Firefox 89+, Safari 16.4+</td>
                     <td>${bzip2Module?._bzip2_compress_buffer_optimized ? '✅ Active' : '❌ Not Available'}</td>
@@ -1398,14 +1397,6 @@ WebAssembly:
                     <td>~80% of baseline speed</td>
                     <td>All browsers including legacy</td>
                     <td>📦 Size Priority</td>
-                </tr>
-                <tr>
-                    <td><strong>Threaded</strong></td>
-                    <td>~150 KB</td>
-                    <td>Multi-threading, SIMD, SharedArrayBuffer</td>
-                    <td>Parallel processing for large files</td>
-                    <td>Requires COOP/COEP headers</td>
-                    <td>🧵 Advanced Feature</td>
                 </tr>
             `;
         }

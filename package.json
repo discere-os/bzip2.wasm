@@ -2,29 +2,29 @@
   "name": "bzip2.wasm",
   "version": "1.1.0",
   "type": "module",
-  "description": "bzip2 compression library compiled to WebAssembly",
+  "packageManager": "pnpm@9.15.0",
+  "description": "High-performance bzip2 compression library with SIMD optimizations",
   "main": "dist/node/index.js",
-  "module": "dist/browser-es6/index.js",
-  "types": "dist/index.d.ts",
+  "module": "dist/browser/index.js",
+  "types": "dist/lib/types.d.ts",
+  "exports": {
+    ".": {
+      "browser": "./dist/browser/index.js",
+      "node": "./dist/node/index.js",
+      "types": "./dist/lib/types.d.ts"
+    }
+  },
   "scripts": {
-    "build": "npm run build:wasm && npm run build:optimized",
-    "build:wasm": "emcc -O3 blocksort.c huffman.c crctable.c randtable.c compress.c decompress.c bzlib.c src/wasm_module.c -s WASM=1 -s MODULARIZE=1 -s EXPORT_ES6=1 -s EXPORTED_FUNCTIONS='[\"_bzip2_compress_buffer\",\"_bzip2_decompress_buffer\",\"_bzip2_compress_bound\",\"_bzip2_get_version\",\"_bzip2_error_string\",\"_malloc\",\"_free\"]' -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"HEAPU8\"]' -s INITIAL_MEMORY=32MB -s MAXIMUM_MEMORY=256MB -s ALLOW_MEMORY_GROWTH=1 -s STACK_SIZE=2MB -s ASSERTIONS=0 --closure 1 -flto -I. -o build/bzip2.js",
-    "build:optimized": "./build-optimized.sh optimized",
-    "build:compact": "./build-optimized.sh size-optimized",
-    "build:debug": "./build-optimized.sh debug",
-    "build:all": "npm run build:optimized && npm run build:compact",
-    "build:dist": "echo 'Distribution build complete'",
-    "test": "node comprehensive_test.js",
-    "test:optimized": "node test/performance/optimized_test.js",
-    "test:unit": "node test/unit/basic_compression.js",
-    "test:integration": "node test/integration/node_integration.js",
-    "test:browser": "playwright test",
-    "benchmark": "node performance_test.js",
-    "benchmark:optimized": "node test/performance/benchmark_optimized.js",
-    "benchmark:compare": "npm run benchmark && npm run benchmark:optimized",
-    "demo": "python3 serve-demo.py 8080",
-    "demo:dev": "python3 serve-demo.py 3000",
-    "dev": "python3 -m http.server 3000"
+    "build": "tsc && npm run build:wasm",
+    "build:wasm": "./build-optimized.sh optimized",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:coverage": "vitest --coverage",
+    "test:ui": "vitest --ui",
+    "type-check": "tsc --noEmit",
+    "demo": "node dist/demo.js",
+    "benchmark": "node dist/benchmark.js",
+    "clean": "rm -rf dist build node_modules/.vite"
   },
   "keywords": [
     "bzip2",
@@ -33,11 +33,14 @@
     "webassembly",
     "decompression"
   ],
-  "author": "WASM Ecosystem Contributors",
+  "author": "Superstruct Ltd, New Zealand",
   "license": "MIT",
   "devDependencies": {
-    "@playwright/test": "^1.40.0",
-    "playwright": "^1.40.0"
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^3.0.0",
+    "@vitest/ui": "^3.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
   },
   "files": [
     "build/",

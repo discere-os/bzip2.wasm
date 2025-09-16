@@ -88,28 +88,34 @@ export interface CompressionOptions {
 
 // Compression result with performance metrics
 export interface CompressionResult {
-  /** Compressed data */
-  compressed: Uint8Array
+  /** Compressed/decompressed data */
+  data: Uint8Array
+  /** Original size in bytes */
+  originalSize: number
+  /** Compressed size in bytes */
+  compressedSize: number
   /** Compression ratio (original/compressed) */
   compressionRatio: number
   /** Time taken in milliseconds */
-  compressionTime: number
-  /** Compression speed in KB/s */
-  compressionSpeed: number
-  /** Space saved as percentage */
-  spaceSaved: number
+  processingTime: number
+  /** Whether SIMD acceleration was used */
+  simdAccelerated: boolean
 }
 
 // Decompression result with validation
 export interface DecompressionResult {
   /** Decompressed data */
-  decompressed: Uint8Array
+  data: Uint8Array
+  /** Original size in bytes */
+  originalSize: number
+  /** Compressed size in bytes */
+  compressedSize: number
+  /** Compression ratio (decompressed/compressed) */
+  compressionRatio: number
   /** Time taken in milliseconds */
-  decompressionTime: number
-  /** Decompression speed in KB/s */  
-  decompressionSpeed: number
-  /** Round-trip validation successful */
-  isValid: boolean
+  processingTime: number
+  /** Whether SIMD acceleration was used */
+  simdAccelerated: boolean
 }
 
 // Performance monitoring
@@ -203,4 +209,33 @@ export interface FileCompressionResult {
   metrics: CompressionResult
   /** Suggested filename for compressed file */
   suggestedFilename: string
+}
+
+// Error classes
+export class Bzip2Error extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'Bzip2Error'
+  }
+}
+
+export class Bzip2MemoryError extends Bzip2Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'Bzip2MemoryError'
+  }
+}
+
+export class Bzip2CompressionError extends Bzip2Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'Bzip2CompressionError'
+  }
+}
+
+export class Bzip2InitError extends Bzip2Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'Bzip2InitError'
+  }
 }

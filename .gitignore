@@ -38,6 +38,9 @@ package-lock.json
 # Build outputs (TypeScript compilation and WASM builds)
 dist/
 build/
+build-*/
+install/
+npm/
 *.js.map
 
 # Test outputs  
@@ -55,8 +58,7 @@ bz_version.h
 .env
 .env.local
 
-# WASM build artifacts (now covered by build/ above)
-build-wasm*/
+# WASM build artifacts (now covered by build-*/ above)
 *.js.mem
 *.js.symbols
 *.js.temp

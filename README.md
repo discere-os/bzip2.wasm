@@ -17,18 +17,33 @@ A faithful fork of the original bzip2 algorithm enhanced with SIMD optimizations
 
 ## Quick Start
 
+### Deno-First Workflow (Recommended)
+
 ```bash
-# Install dependencies
-pnpm install
+# Run demo with Deno (direct TypeScript execution)
+deno task demo
 
-# Build WASM module and TypeScript library
-pnpm build
+# Build WASM modules
+deno task build
 
-# Run comprehensive demo
-pnpm demo
+# Run tests
+deno task test
 
-# Run test suite
-pnpm test
+# Run benchmarks
+deno task benchmark
+
+# Build NPM package for Node.js compatibility
+deno task build:npm
+```
+
+### Node.js Compatibility
+
+```bash
+# Build NPM package for Node.js projects
+deno task build:npm
+
+# The built NPM package can then be installed in Node.js projects:
+# npm install @discere-os/bzip2.wasm
 ```
 
 ## Usage
@@ -36,7 +51,7 @@ pnpm test
 ### Basic Compression
 
 ```typescript
-import Bzip2 from '@superstruct/bzip2.wasm'
+import Bzip2 from '@discere-os/bzip2.wasm'
 
 const bzip2 = new Bzip2()
 await bzip2.initialize()
@@ -180,43 +195,31 @@ interface PerformanceMetrics {
 ### Building from Source
 
 ```bash
-# Prerequisites
-pnpm install
-
 # Build optimized WASM module
-pnpm build:wasm
-
-# Compile TypeScript library  
-pnpm build
+deno task build
 
 # Verify build
-pnpm test
+deno task test
 ```
 
 ### Testing
 
 ```bash
-# Run comprehensive test suite (75 tests)
-pnpm test
+# Run comprehensive test suite
+deno task test
 
-# Run with coverage reporting
-pnpm test:coverage
-
-# Run TypeScript compilation check
-pnpm type-check
-
-# Interactive test UI
-pnpm test:ui
+# Run benchmarks
+deno task benchmark
 ```
 
 ### Performance Monitoring
 
 ```bash
 # Run performance demo
-pnpm demo
+deno task demo
 
 # Run comprehensive benchmarks
-pnpm benchmark
+deno task benchmark
 ```
 
 ## Architecture
@@ -259,7 +262,7 @@ Copyright (C) 2021 [Micah Snyder](https://gitlab.com/micahsnyder)
 
 ### WASM Fork Attribution
 
-Copyright (C) 2025 Superstruct Ltd, New Zealand  
+Copyright (C) 2025 Superstruct Ltd, New Zealand
 Licensed under the same license as the underlying bzip2 project
 
 ## Acknowledgments

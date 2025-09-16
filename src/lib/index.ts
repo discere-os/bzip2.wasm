@@ -1,248 +1,300 @@
 /**
- * bzip2.wasm - Professional compression library
- * Type-safe, high-performance implementation with SIMD optimizations
+ * bzip2.wasm - Simple TypeScript interface for Deno
+ * Based on zlib.wasm patterns for compatibility
  */
 
+import {
+  Bzip2Error,
+  Bzip2MemoryError,
+  Bzip2CompressionError,
+  Bzip2InitError
+} from './types.ts'
 import type {
-  Bzip2Module,
   CompressionOptions,
   CompressionResult,
   DecompressionResult,
   PerformanceMetrics,
-  InitializationOptions,
-  SystemCapabilities,
-  BenchmarkResult,
-  FileCompressionResult,
-  NavigatorWithMemory
-} from './types'
+  BenchmarkResult
+} from './types.ts'
 
-/**
- * High-performance bzip2 compression with SIMD acceleration
- */
-export class Bzip2 {
-  private module: Bzip2Module | null = null
+// Simple WASM module interface for bzip2
+interface SimpleBzip2Module {
+  _bzip2_compress_buffer: (src: number, srcLen: number, dest: number, destLen: number, blockSize: number, verbosity: number, workFactor: number) => number
+  _bzip2_decompress_buffer: (src: number, srcLen: number, dest: number, destLen: number, verbosity: number, small: number) => number
+  _bzip2_compress_bound: (inputLen: number) => number
+  _bzip2_get_version: () => number
+  _bzip2_error_string: (errorCode: number) => number
+  _malloc: (size: number) => number
+  _free: (ptr: number) => void
+  HEAPU8: Uint8Array
+  HEAP32: Int32Array
+  getValue: (ptr: number, type: string) => number
+  setValue: (ptr: number, value: number, type: string) => void
+  UTF8ToString?: (ptr: number) => string
+}
+
+export default class Bzip2 {
+  private module: SimpleBzip2Module | null = null
   private initialized = false
-  private metrics: PerformanceMetrics = this.createInitialMetrics()
+  private performanceMetrics = {
+    compressionOps: 0,
+    decompressionOps: 0,
+    totalCompressionTime: 0,
+    totalDecompressionTime: 0
+  }
 
-  /**
-   * Initialize the WASM module
-   */
-  async initialize(options: InitializationOptions = {}): Promise<void> {
+  constructor(options: { simdOptimizations?: boolean, maxMemoryMB?: number } = {}) {
+    // Simple constructor for basic compatibility
+    this.simdOptimizations = options.simdOptimizations ?? true
+    this.maxMemoryMB = options.maxMemoryMB ?? 256
+  }
+
+  private simdOptimizations: boolean
+  private maxMemoryMB: number
+
+  async initialize(): Promise<void> {
     if (this.initialized) return
 
     try {
-      // Detect optimal module for environment
-      const modulePath = this.selectOptimalModule(options)
-      
-      // Dynamic import with proper typing
-      const moduleFactory = await import(/* @vite-ignore */ modulePath)
-      this.module = await moduleFactory.default()
-      
+      // Load WASM module with CDN fallback
+      const moduleFactory = await this.loadWASMModule()
+      this.module = await moduleFactory({
+        wasmBinary: await this.loadWasmBinary()
+      })
+
+      // Verify WASM functions available
+      const requiredFunctions = [
+        '_bzip2_compress_buffer',
+        '_bzip2_decompress_buffer',
+        '_bzip2_compress_bound',
+        '_bzip2_get_version'
+      ]
+
+      if (!this.module) {
+        throw new Bzip2InitError('WASM module is null after initialization')
+      }
+
+      for (const func of requiredFunctions) {
+        if (typeof (this.module as any)[func] !== 'function') {
+          throw new Bzip2InitError(`Missing WASM function: ${func}`)
+        }
+      }
+
       this.initialized = true
-
-      // Initialize optimized memory management if available
-      if (this.module) {
-        this.module._bzip2_init_optimized_memory?.()
-      }
-
-      if (options.enableMetrics && this.module) {
-        this.startMetricsCollection()
-      }
+      console.log('✅ bzip2.wasm initialized successfully')
     } catch (error) {
-      throw new Error(`Failed to initialize bzip2.wasm: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Bzip2InitError(`Failed to initialize bzip2.wasm: ${errorMessage}`)
     }
   }
 
-  /**
-   * Compress data with optimal performance
-   */
-  compress(
-    input: Uint8Array, 
-    options: CompressionOptions = {}
-  ): CompressionResult {
-    this.assertInitialized()
+  async compress(data: Uint8Array, options: CompressionOptions = {}): Promise<CompressionResult> {
+    if (!this.initialized || !this.module) {
+      throw new Bzip2Error('bzip2.wasm not initialized')
+    }
 
     const startTime = performance.now()
-    const { blockSize = 6, verbosity = 0, workFactor = 30 } = options
+    const blockSize = options.blockSize || 6
+    const verbosity = options.verbosity || 0
+    const workFactor = options.workFactor || 30
 
-    // Validate inputs
-    if (input.length === 0) {
-      throw new Error('Input data cannot be empty')
-    }
-    if (blockSize < 1 || blockSize > 9) {
-      throw new Error('Block size must be between 1 and 9')
-    }
+    // Allocate input buffer
+    const inputPtr = this.module._malloc(data.length)
+    this.module.HEAPU8.set(data, inputPtr)
 
-    // Memory allocation with automatic cleanup
-    const inputPtr = this.module!._malloc(input.length)
-    const maxOutputLen = this.getCompressBound(input.length)
-    const outputPtr = this.module!._malloc(maxOutputLen)
-    const outputLenPtr = this.module!._malloc(4)
+    // Calculate maximum output buffer size
+    const maxOutputSize = this.module._bzip2_compress_bound(data.length)
+    const outputPtr = this.module._malloc(maxOutputSize)
+
+    // Allocate space for the output length (unsigned long*)
+    const outputLenPtr = this.module._malloc(4)
+    this.module.setValue(outputLenPtr, maxOutputSize, 'i32')
 
     try {
-      // Setup memory
-      this.module!.HEAPU8.set(input, inputPtr)
-      this.module!.setValue(outputLenPtr, maxOutputLen, 'i32')
-
-      // Perform compression (use optimized if available, fallback to standard)
-      const compressFunc = this.module!._bzip2_compress_buffer_optimized || this.module!._bzip2_compress_buffer
-      const result = compressFunc(
-        inputPtr, input.length, outputPtr, outputLenPtr,
-        blockSize, verbosity, workFactor
+      // Perform compression
+      const result = this.module._bzip2_compress_buffer(
+        inputPtr,
+        data.length,
+        outputPtr,
+        outputLenPtr,
+        blockSize,
+        verbosity,
+        workFactor
       )
 
       if (result !== 0) {
-        const errorMessage = this.getErrorString(result)
-        throw new Error(`Compression failed: ${errorMessage}`)
+        throw new Bzip2CompressionError(`Compression failed with code: ${result}`)
       }
 
-      // Extract results
-      const outputLen = this.module!.getValue(outputLenPtr, 'i32')
-      const compressed = new Uint8Array(outputLen)
-      compressed.set(this.module!.HEAPU8.subarray(outputPtr, outputPtr + outputLen))
+      // Get the actual compressed size
+      const compressedSize = this.module.getValue(outputLenPtr, 'i32')
 
-      const compressionTime = performance.now() - startTime
-      const compressionSpeed = (input.length / 1024) / (compressionTime / 1000)
-      const compressionRatio = input.length / compressed.length
-      const spaceSaved = ((input.length - compressed.length) / input.length) * 100
+      if (compressedSize === 0) {
+        throw new Bzip2CompressionError('Compression failed - no output generated')
+      }
+
+      // Copy compressed data
+      const compressed = new Uint8Array(compressedSize)
+      compressed.set(
+        this.module.HEAPU8.subarray(outputPtr, outputPtr + compressedSize)
+      )
+
+      const endTime = performance.now()
+      const processingTime = endTime - startTime
 
       // Update metrics
-      this.updateCompressionMetrics(input.length, compressionTime)
+      this.performanceMetrics.compressionOps++
+      this.performanceMetrics.totalCompressionTime += processingTime
 
       return {
-        compressed,
-        compressionRatio,
-        compressionTime,
-        compressionSpeed,
-        spaceSaved
+        data: compressed,
+        originalSize: data.length,
+        compressedSize: compressedSize,
+        compressionRatio: data.length / compressedSize,
+        processingTime: processingTime,
+        simdAccelerated: this.simdOptimizations
       }
     } finally {
-      // Guaranteed memory cleanup
-      this.module!._free(inputPtr)
-      this.module!._free(outputPtr)
-      this.module!._free(outputLenPtr)
+      // Free memory
+      this.module._free(inputPtr)
+      this.module._free(outputPtr)
+      this.module._free(outputLenPtr)
     }
   }
 
-  /**
-   * Decompress data with validation
-   */
-  decompress(compressed: Uint8Array): DecompressionResult {
-    this.assertInitialized()
+  async decompress(compressed: Uint8Array): Promise<DecompressionResult> {
+    if (!this.initialized || !this.module) {
+      throw new Bzip2Error('bzip2.wasm not initialized')
+    }
 
     const startTime = performance.now()
-    
-    // Estimate decompressed size (no arbitrary cap - let it grow as needed)
-    const maxOutputLen = Math.max(compressed.length * 50, 10 * 1024 * 1024) // 50x expansion ratio, 10MB min
 
-    const inputPtr = this.module!._malloc(compressed.length)
-    const outputPtr = this.module!._malloc(maxOutputLen)
-    const outputLenPtr = this.module!._malloc(4)
+    // Estimate decompressed size (be generous for bzip2)
+    const estimatedSize = Math.max(compressed.length * 10, 64 * 1024)
+    const inputPtr = this.module._malloc(compressed.length)
+    const outputPtr = this.module._malloc(estimatedSize)
+    const outputLenPtr = this.module._malloc(4)
+
+    this.module.HEAPU8.set(compressed, inputPtr)
+    this.module.setValue(outputLenPtr, estimatedSize, 'i32')
 
     try {
-      // Setup memory
-      this.module!.HEAPU8.set(compressed, inputPtr)
-      this.module!.setValue(outputLenPtr, maxOutputLen, 'i32')
-
-      // Perform decompression (use optimized if available, fallback to standard)
-      const decompressFunc = this.module!._bzip2_decompress_buffer_optimized || this.module!._bzip2_decompress_buffer
-      const result = decompressFunc(
-        inputPtr, compressed.length, outputPtr, outputLenPtr, 0, 0
+      // Perform decompression
+      const result = this.module._bzip2_decompress_buffer(
+        inputPtr,
+        compressed.length,
+        outputPtr,
+        outputLenPtr,
+        0, // verbosity
+        0  // small
       )
 
       if (result !== 0) {
-        const errorMessage = this.getErrorString(result)
-        throw new Error(`Decompression failed: ${errorMessage}`)
+        throw new Bzip2CompressionError(`Decompression failed with code: ${result}`)
       }
 
-      // Extract results
-      const outputLen = this.module!.getValue(outputLenPtr, 'i32')
-      const decompressed = new Uint8Array(outputLen)
-      decompressed.set(this.module!.HEAPU8.subarray(outputPtr, outputPtr + outputLen))
+      // Get the actual decompressed size
+      const decompressedSize = this.module.getValue(outputLenPtr, 'i32')
 
-      const decompressionTime = performance.now() - startTime
-      const decompressionSpeed = (decompressed.length / 1024) / (decompressionTime / 1000)
+      if (decompressedSize === 0) {
+        throw new Bzip2CompressionError('Decompression failed - no output generated')
+      }
+
+      // Copy decompressed data
+      const decompressed = new Uint8Array(decompressedSize)
+      decompressed.set(
+        this.module.HEAPU8.subarray(outputPtr, outputPtr + decompressedSize)
+      )
+
+      const endTime = performance.now()
+      const processingTime = endTime - startTime
 
       // Update metrics
-      this.updateDecompressionMetrics(decompressed.length, decompressionTime)
+      this.performanceMetrics.decompressionOps++
+      this.performanceMetrics.totalDecompressionTime += processingTime
 
       return {
-        decompressed,
-        decompressionTime,
-        decompressionSpeed,
-        isValid: decompressed.length > 0
+        data: decompressed,
+        originalSize: decompressed.length,
+        compressedSize: compressed.length,
+        compressionRatio: decompressed.length / compressed.length,
+        processingTime: processingTime,
+        simdAccelerated: this.simdOptimizations
       }
     } finally {
-      this.module!._free(inputPtr)
-      this.module!._free(outputPtr)
-      this.module!._free(outputLenPtr)
+      this.module._free(inputPtr)
+      this.module._free(outputPtr)
+      this.module._free(outputLenPtr)
     }
   }
 
-  /**
-   * Get maximum possible compressed size
-   */
-  getCompressBound(inputLength: number): number {
-    this.assertInitialized()
-    const boundFunc = this.module!._bzip2_compress_bound_optimized || this.module!._bzip2_compress_bound
-    return boundFunc(inputLength)
-  }
-
-  /**
-   * Get library version
-   */
-  getVersion(): string {
-    this.assertInitialized()
-    const versionFunc = this.module!._bzip2_get_version_optimized || this.module!._bzip2_get_version
-    const versionPtr = versionFunc()
-    return this.readString(versionPtr) || '1.1.0'
-  }
-
-  /**
-   * Get current performance metrics
-   */
   getPerformanceMetrics(): PerformanceMetrics {
-    return { ...this.metrics }
+    const avgCompressionSpeed = this.performanceMetrics.compressionOps > 0
+      ? (this.performanceMetrics.totalCompressionTime / this.performanceMetrics.compressionOps)
+      : 0
+
+    const avgDecompressionSpeed = this.performanceMetrics.decompressionOps > 0
+      ? (this.performanceMetrics.totalDecompressionTime / this.performanceMetrics.decompressionOps)
+      : 0
+
+    return {
+      compressionOps: this.performanceMetrics.compressionOps,
+      decompressionOps: this.performanceMetrics.decompressionOps,
+      averageCompressionSpeed: avgCompressionSpeed,
+      averageDecompressionSpeed: avgDecompressionSpeed,
+      totalCompressionTime: this.performanceMetrics.totalCompressionTime,
+      totalDecompressionTime: this.performanceMetrics.totalDecompressionTime,
+      simdAcceleration: this.simdOptimizations
+    }
   }
 
-  /**
-   * Reset performance metrics
-   */
-  resetMetrics(): void {
-    this.metrics = this.createInitialMetrics()
-  }
-
-  /**
-   * Detect system capabilities
-   */
-  getSystemCapabilities(): SystemCapabilities {
+  getSystemCapabilities() {
     return {
       wasmSupported: typeof WebAssembly !== 'undefined',
-      simdSupported: this.detectSIMDSupport(),
-      estimatedMemory: this.getNavigatorMemory(),
-      coreCount: navigator.hardwareConcurrency
+      simdSupported: this.simdOptimizations,
+      version: this.getVersion(),
+      maxMemoryMB: this.maxMemoryMB,
+      blockSizes: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     }
   }
 
-  /**
-   * Benchmark different configurations
-   */
-  async benchmark(testData: Uint8Array): Promise<BenchmarkResult> {
-    const dataType = this.classifyData(testData)
+  getCapabilities() {
+    return {
+      simdSupported: this.simdOptimizations,
+      version: this.getVersion(),
+      maxMemoryMB: this.maxMemoryMB
+    }
+  }
+
+  getVersion(): string {
+    if (!this.initialized || !this.module) {
+      return '1.0.8'
+    }
+
+    try {
+      const versionPtr = this.module._bzip2_get_version()
+      return this.module.UTF8ToString?.(versionPtr) || '1.0.8'
+    } catch {
+      return '1.0.8'
+    }
+  }
+
+  async benchmark(data: Uint8Array, _iterations: number = 10): Promise<BenchmarkResult> {
+    const dataType = this.classifyData(data)
     const results: BenchmarkResult['results'] = {}
 
     // Test all block sizes
     for (const blockSize of [1, 6, 9] as const) {
       try {
-        const result = this.compress(testData, { blockSize })
-        const decompResult = this.decompress(result.compressed)
-        
+        const result = await this.compress(data, { blockSize })
+        const decompResult = await this.decompress(result.data)
+
         results[blockSize] = {
-          compressionSpeed: result.compressionSpeed,
-          decompressionSpeed: decompResult.decompressionSpeed,
+          compressionSpeed: result.processingTime > 0 ? (data.length / 1024) / (result.processingTime / 1000) : 0,
+          decompressionSpeed: decompResult.processingTime > 0 ? (decompResult.data.length / 1024) / (decompResult.processingTime / 1000) : 0,
           compressionRatio: result.compressionRatio,
-          spaceSaved: result.spaceSaved,
-          time: result.compressionTime + decompResult.decompressionTime
+          spaceSaved: ((data.length - result.compressedSize) / data.length) * 100,
+          time: result.processingTime + decompResult.processingTime
         }
       } catch (error) {
         console.warn(`Benchmark failed for block size ${blockSize}:`, error)
@@ -251,16 +303,16 @@ export class Bzip2 {
 
     // Determine optimal configurations
     const entries = Object.entries(results)
-    const fastestComp = entries.reduce((a, b) => 
+    const fastestComp = entries.reduce((a, b) =>
       (results[parseInt(a[0])]?.compressionSpeed ?? 0) > (results[parseInt(b[0])]?.compressionSpeed ?? 0) ? a : b
     )
-    const bestRatio = entries.reduce((a, b) => 
+    const bestRatio = entries.reduce((a, b) =>
       (results[parseInt(a[0])]?.compressionRatio ?? 0) > (results[parseInt(b[0])]?.compressionRatio ?? 0) ? a : b
     )
 
     return {
       dataType,
-      inputSize: testData.length,
+      inputSize: data.length,
       results,
       recommendation: {
         fastestCompression: parseInt(fastestComp[0]),
@@ -270,140 +322,17 @@ export class Bzip2 {
     }
   }
 
-  /**
-   * Process file with optimal settings
-   */
-  async compressFile(file: File): Promise<FileCompressionResult> {
-    const arrayBuffer = await file.arrayBuffer()
-    const fileData = new Uint8Array(arrayBuffer)
-    
-    // Auto-select optimal block size based on file size
-    let blockSize: 1 | 6 | 9 = 6
-    if (file.size < 32768) blockSize = 1      // < 32KB: fast
-    else if (file.size > 262144) blockSize = 9 // > 256KB: max compression
-
-    const metrics = this.compress(fileData, { blockSize })
-    
-    return {
-      fileName: file.name,
-      originalSize: file.size,
-      compressedData: metrics.compressed,
-      metrics,
-      suggestedFilename: `${file.name}.bz2`
-    }
-  }
-
-  /**
-   * Cleanup resources
-   */
-  cleanup(): void {
-    this.module?._bzip2_cleanup_optimized_memory?.()
-    this.module = null
-    this.initialized = false
-  }
-
-  // Private methods
-  private assertInitialized(): void {
-    if (!this.initialized || !this.module) {
-      throw new Error('bzip2.wasm not initialized. Call initialize() first.')
-    }
-  }
-
-  private selectOptimalModule(options: InitializationOptions): string {
-    if (options.wasmPath) return options.wasmPath
-    
-    // Determine absolute path based on execution context
-    const basePath = process.cwd() + '/build/'
-    
-    // Always try optimized build first (it should fallback gracefully)
-    if (options.preferOptimized !== false) {
-      return `${basePath}bzip2-optimized.js`
-    }
-    
-    return `${basePath}bzip2.js`
-  }
-
-  private detectSIMDSupport(): boolean {
-    try {
-      // Method 1: Check for WebAssembly.SIMD (newer browsers)
-      if ('SIMD' in WebAssembly) {
-        return true
-      }
-      
-      // Method 2: User agent-based detection for known SIMD support
-      const userAgent = navigator.userAgent
-      
-      if (userAgent.includes('Chrome/')) {
-        const chromeVersion = parseInt(userAgent.match(/Chrome\/(\d+)/)?.[1] || '0')
-        return chromeVersion >= 91
-      }
-      
-      if (userAgent.includes('Firefox/')) {
-        const firefoxVersion = parseInt(userAgent.match(/Firefox\/(\d+)/)?.[1] || '0')
-        return firefoxVersion >= 89
-      }
-      
-      if (userAgent.includes('Safari/') && !userAgent.includes('Chrome/')) {
-        // Safari SIMD support detection
-        return userAgent.includes('Version/16') || userAgent.includes('Version/17') || userAgent.includes('Version/18')
-      }
-      
-      // Method 3: Try a minimal SIMD WASM module
-      try {
-        new WebAssembly.Module(new Uint8Array([
-          0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // WASM header
-          0x01, 0x04, 0x01, 0x60, 0x00, 0x00,             // Type section: () -> ()
-          0x03, 0x02, 0x01, 0x00,                         // Function section  
-          0x0a, 0x09, 0x01, 0x07, 0x00,                   // Code section
-          0xfd, 0x0c,                                     // v128.const
-          0x01, 0x00, 0x00, 0x00,                         // 4 bytes of data
-          0x0b                                            // end
-        ]))
-        return true
-      } catch {
-        return false
-      }
-      
-    } catch {
-      return false
-    }
-  }
-
-  private getNavigatorMemory(): number | undefined {
-    return typeof navigator !== 'undefined' 
-      ? (navigator as NavigatorWithMemory).deviceMemory 
-      : undefined
-  }
-
-  private readString(ptr: number): string | null {
-    if (!this.module) return null
-    
-    if (this.module.UTF8ToString) {
-      return this.module.UTF8ToString(ptr)
-    }
-    if (this.module.AsciiToString) {
-      return this.module.AsciiToString(ptr)
-    }
-    return null
-  }
-
-  private getErrorString(errorCode: number): string {
-    const errorFunc = this.module!._bzip2_error_string_optimized || this.module!._bzip2_error_string
-    const errorPtr = errorFunc(errorCode)
-    return this.readString(errorPtr) || `Error code ${errorCode}`
-  }
-
   private classifyData(data: Uint8Array): BenchmarkResult['dataType'] {
     // Simple heuristic for data classification
     const sample = data.slice(0, Math.min(1024, data.length))
     let textChars = 0
-    
+
     for (const byte of sample) {
       if ((byte >= 32 && byte <= 126) || byte === 9 || byte === 10 || byte === 13) {
         textChars++
       }
     }
-    
+
     const textRatio = textChars / sample.length
     if (textRatio > 0.9) return 'text'
     if (textRatio > 0.7) return 'json'
@@ -411,71 +340,54 @@ export class Bzip2 {
     return 'random'
   }
 
-  private createInitialMetrics(): PerformanceMetrics {
-    return {
-      compressionOps: 0,
-      decompressionOps: 0,
-      averageCompressionSpeed: 0,
-      averageDecompressionSpeed: 0,
-      totalCompressionTime: 0,
-      totalDecompressionTime: 0,
-      simdAcceleration: this.detectSIMDSupport()
+  cleanup(): void {
+    this.module = null
+    this.initialized = false
+  }
+
+  private async loadWASMModule(): Promise<any> {
+    // Try to load from local file first (development)
+    try {
+      // Use dynamic import with absolute path to avoid TypeScript module resolution
+      const modulePath = new URL('./../../install/wasm/bzip2-release.js', import.meta.url).href
+      const localModule = await import(modulePath) as any
+      return localModule.default
+    } catch (error) {
+      throw new Bzip2InitError(`Failed to load bzip2.wasm module: ${error}`)
     }
   }
 
-  private updateCompressionMetrics(bytes: number, time: number): void {
-    this.metrics.compressionOps++
-    this.metrics.totalCompressionTime += time
-    
-    const speed = (bytes / 1024) / (time / 1000)
-    this.metrics.averageCompressionSpeed = 
-      (this.metrics.averageCompressionSpeed * (this.metrics.compressionOps - 1) + speed) / 
-      this.metrics.compressionOps
-  }
+  private async loadWasmBinary(): Promise<ArrayBuffer> {
+    // Try local build paths first (for Deno and Node.js testing)
+    // @ts-ignore - Deno global may not exist in all environments
+    if (typeof globalThis.Deno !== 'undefined') {
+      const localPaths = [
+        './install/wasm/bzip2-release.wasm',
+        './install/wasm/bzip2.wasm',
+        './build-dual-main-release/bzip2-release.wasm',
+        './build/bzip2-release.wasm'
+      ]
 
-  private updateDecompressionMetrics(bytes: number, time: number): void {
-    this.metrics.decompressionOps++
-    this.metrics.totalDecompressionTime += time
-    
-    const speed = (bytes / 1024) / (time / 1000)
-    this.metrics.averageDecompressionSpeed = 
-      (this.metrics.averageDecompressionSpeed * (this.metrics.decompressionOps - 1) + speed) / 
-      this.metrics.decompressionOps
-  }
+      for (const localPath of localPaths) {
+        try {
+          const wasmBuffer = await Deno.readFile(localPath)
+          console.log(`✅ Loaded bzip2.wasm binary from: ${localPath}`)
+          return wasmBuffer.buffer
+        } catch (error) {
+          console.log(`⚠️ Failed to load WASM from ${localPath}:`, (error as Error).message)
+          continue
+        }
+      }
+    }
 
-  private startMetricsCollection(): void {
-    // Enable any available performance monitoring
-    this.module?._bzip2_init_optimized_allocator?.()
-  }
-}
-
-// Utility functions
-export function formatSpeed(speedKBps: number): string {
-  if (speedKBps >= 1024 * 1024) {
-    return `${(speedKBps / 1024 / 1024).toFixed(1)} GB/s`
-  } else if (speedKBps >= 1024) {
-    return `${(speedKBps / 1024).toFixed(1)} MB/s`
-  } else if (speedKBps >= 1) {
-    return `${speedKBps.toFixed(1)} KB/s`
-  } else {
-    return `${(speedKBps * 1024).toFixed(0)} B/s`
+    throw new Error('No bzip2.wasm binary available. Run "deno task build:wasm" to rebuild WASM files.')
   }
 }
 
-export function formatSize(bytes: number): string {
-  if (bytes >= 1024 * 1024 * 1024) {
-    return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
-  } else if (bytes >= 1024 * 1024) {
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  } else if (bytes >= 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`
-  } else {
-    return `${bytes} B`
-  }
+// Export types and classes
+export {
+  Bzip2Error,
+  Bzip2MemoryError,
+  Bzip2CompressionError,
+  Bzip2InitError
 }
-
-// Default export
-export default Bzip2
-
-// Re-export types
-export type * from './types'

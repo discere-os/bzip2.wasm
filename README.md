@@ -1,4 +1,12 @@
-# bzip2.wasm
+# @discere-os/bzip2.wasm
+
+WebAssembly port of bzip2 - High-performance compression library with SIMD optimizations and modern TypeScript interfaces.
+
+[![CI/CD](https://github.com/discere-os/discere-nucleus/actions/workflows/bzip2-wasm-ci.yml/badge.svg)](https://github.com/discere-os/discere-nucleus/actions)
+[![JSR](https://jsr.io/badges/@discere-os/bzip2.wasm)](https://jsr.io/@discere-os/bzip2.wasm)
+[![npm version](https://badge.fury.io/js/@discere-os%2Fbzip2.wasm.svg)](https://badge.fury.io/js/@discere-os%2Fbzip2.wasm)
+[![License](https://img.shields.io/badge/License-bzip2-blue.svg)](COPYING)
+[![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/discere-os/discere-nucleus)
 
 **High-performance bzip2 compression compiled to WebAssembly**
 

@@ -3,13 +3,15 @@
   "version": "1.1.0",
   "exports": "./src/lib/index.ts",
   "tasks": {
-    "build": "./build-dual.sh && deno run -A scripts/build-types.ts",
-    "build:wasm": "./build-dual.sh",
+    "build": "deno task build:wasm:meson && deno run -A scripts/build-types.ts",
+    "build:main:meson": "meson setup build-main --cross-file=scripts/emscripten.cross --prefix=$PWD/install -Dlibdir=wasm -Dbindir=wasm && meson compile -C build-main bzip2-main && meson install -C build-main",
+    "build:side:meson": "meson setup build-side --cross-file=scripts/emscripten.cross --prefix=$PWD/install -Dlibdir=wasm -Dbindir=wasm && meson compile -C build-side bzip2-side && meson install -C build-side",
+    "build:wasm:meson": "deno task build:main:meson && deno task build:side:meson",
     "build:npm": "deno run -A scripts/build-npm.ts",
     "demo": "deno run -A demo-deno.ts",
     "test": "deno test -A tests/",
     "benchmark": "deno run -A bench/compression.bench.ts",
-    "clean": "rm -rf dist/ build/ build-*/ npm/ node_modules/ install/ && echo '✅ Cleaned all build artifacts'"
+    "clean": "rm -rf dist/ build-* npm/ node_modules/ install/ && echo '✅ Cleaned all build artifacts'"
   },
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "dom.asynciterable", "deno.ns", "es2022"],
